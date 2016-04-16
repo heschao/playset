@@ -2,8 +2,11 @@ import logging
 import os
 from os.path import dirname
 
+import numpy as np
+import numpy.testing as npt
+
 from playset.attributes import Purple, Green, Red, Solid, Shaded, Empty, Squiggle, Diamond, Oval, Card
-from playset.identify import id_attributes, CardRepo
+from playset.identify import id_attributes, CardRepo, complement, find_set, encode, decode_attributes
 
 Truth = {
     0: Card(Purple, 3, Solid, Squiggle),
@@ -109,3 +112,29 @@ def get_repo():
     root = os.path.join(path, '..', 'data', 'training')
     repo = CardRepo(root)
     return repo
+
+
+def test_line():
+    a = [0,0,0,0]
+    b = [1,1,1,1]
+    npt.assert_array_equal(complement(a, b), np.array([2, 2, 2, 2]))
+
+
+def test_encode():
+    assert(encode([0, 0, 0, 0]) == 0)
+    assert(encode([1, 0, 0, 0]) == 27)
+
+def test_algo():
+    cards = [
+        [0,0,0,0],
+        [0,1,0,0],
+        [0,1,2,0],
+        [0,2,1,0],
+    ]
+    result = find_set(cards)
+    assert(set(result)=={0,2,3})
+
+
+def test_decode_attributes():
+    result = decode_attributes(Card(count=2, color=Red, shading=Shaded, shape=Diamond))
+    npt.assert_array_equal(result,[1,0,1,0])

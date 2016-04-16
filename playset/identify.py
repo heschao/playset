@@ -20,7 +20,8 @@ from card_img import getCards, rectify
 # upper = np.array([80,256,256])
 # b = cv2.inRange(hsvcard,lower,upper)
 
-from playset.attributes import Oval, Diamond, Squiggle, Card, Red, Solid, Purple, Green, Orange, Shaded, Empty
+from playset.attributes import Oval, Diamond, Squiggle, Card, Red, Solid, Purple, Green, Orange, Shaded, Empty, \
+    AttributeKey
 
 
 def card(n):
@@ -118,7 +119,6 @@ def get_features(img,threshold_val=None,blur_sigma=1000):
         else:
             t.append(u[0])
 
-    print t
     w = []
     for i in range(0,len(y)):
         if i not in t:
@@ -158,7 +158,7 @@ def extract_card(contour, im):
     warp = None
     peri = cv2.arcLength(contour, True)
     h = cv2.approxPolyDP(contour, 0.02 * peri, True)
-    if h.shape[0] > 4 :
+    if h.shape[0] != 4 :
         return warp
     approx = rectify(h)
     h = np.array([[0, 0], [449, 0], [449, 449], [0, 449]], np.float32)
@@ -286,10 +286,10 @@ def guess_shading(card,features):
     points = [0, 1, 5, 10, 50, 90, 95, 99, 100]
     xprctiles = np.percentile(x[x > 0], points)
     yprctiles = np.percentile(y[y > 0], points)
-    print(xprctiles)
-    print(yprctiles)
-    print(feature_intensity / xprctiles[2])
-    print [feature_intensity/bg_intensity, feature_intensity, bg_intensity]
+    # print(xprctiles)
+    # print(yprctiles)
+    # print(feature_intensity / xprctiles[2])
+    # print [feature_intensity/bg_intensity, feature_intensity, bg_intensity]
 
     if feature_intensity/bg_intensity < 0.75:
         return Solid
@@ -318,3 +318,89 @@ class CardRepo(object):
             return cv2.imread(filename)
         else:
             raise Exception('{:} not found'.format(filename))
+
+
+def complement(a, b):
+    result = np.zeros(4)
+    for i in range(0,4):
+        if a[i]==b[i]:
+            result[i] = a[i]
+        else:
+            d = {0, 1, 2}.difference({a[i], b[i]})
+            result[i] = d.pop()
+    return result
+
+
+def find_set(cards):
+    n = len(cards)
+    codes = [encode(x) for x in cards]
+    for i in range(0,n):
+        for j in range(i+1,n):
+            c = complement( cards[i], cards[j] )
+            try:
+                k = codes.index(encode(c))
+                return i,j,k
+            except:
+                pass
+    return None,None,None
+
+def encode(x):
+    s = 0
+    for i in [0,1,2,3]:
+        s += (3**(3-i))*x[i]
+    return s
+
+
+def decode_attributes(attr):
+    return [
+        AttributeKey.get('count').get(attr.count),
+        AttributeKey.get('color').get(attr.color.name),
+        AttributeKey.get('shading').get(attr.shading),
+        AttributeKey.get('shape').get(attr.shape),
+    ]
+
+
+def set_from_img(img,title='image'):
+    card_contours = [x for x in get_card_contours(img, 20)]
+    n = len(card_contours)
+    attr = [None] * n
+    icp = img.copy()
+    for i in range(0, n):
+        contour = card_contours[i]
+        card = extract_card(contour, img)
+        if card is None:
+            continue
+        try:
+            a = id_attributes(card)  # type: Card
+            attr[i] = a
+            x, y, w, h = cv2.boundingRect(contour)
+
+            font = cv2.FONT_HERSHEY_SIMPLEX
+            size = 0.75
+            inc = 25
+            x0 = x + 50
+            y0 = y + 50
+            cv2.putText(icp, str(a.count), (x0, y0), font, size, (0, 0, 0), 2, cv2.LINE_AA)
+            cv2.putText(icp, str(a.color.name), (x0, y0 + inc), font, size, (0, 0, 0), 2, cv2.LINE_AA)
+            cv2.putText(icp, str(a.shading), (x0, y0 + inc * 2), font, size, (0, 0, 0), 2, cv2.LINE_AA)
+            cv2.putText(icp, str(a.shape), (x0, y0 + inc * 3), font, size, (0, 0, 0), 2, cv2.LINE_AA)
+            cv2.drawContours(icp, card_contours, i, (0, 255, 0), 3)
+        except:
+            pass
+    card_contours = [card_contours[x] for x in range(0, len(card_contours)) if attr[x] is not None]
+    attr = [attr[x] for x in range(0, len(attr)) if attr[x] is not None]
+    x = [decode_attributes(x) for x in attr]
+    n_unique = len(set([encode(y) for y in x]))
+    n_attr = len(attr)
+    if n_unique < n_attr:
+        raise Exception('duplicate attributes! {:}/{:}'.format(n_unique,n_attr))
+
+    i, j, k = find_set(x)
+    print 'set indexes: {:},{:},{:}'.format(i, j, k)
+    if i is not None:
+        icp = img.copy()
+        cv2.drawContours(icp, [card_contours[x] for x in [i, j, k]], -1, (255, 0, 0), 10)
+        cv2.drawContours(icp, [card_contours[x] for x in [i, j, k]], -1, (0, 0, 255), 4)
+        cv2.imshow(title, icp)
+        cv2.waitKey()
+        cv2.destroyWindow(title)
