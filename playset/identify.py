@@ -1,50 +1,26 @@
-from collections import namedtuple
+import logging
+import os
+import sys
 
 import cv2
-import os
-
-import sys
 import matplotlib.pyplot as plt
 import numpy as np
 from card_img import getCards
-import card_img
-import pandas as pd
-
-
-Purple = 'purple'
-Green = 'green'
-Red = 'red'
-Solid = 'solid'
-Shaded = 'shaded'
-Empty = 'empty'
-Squiggle = 'squiggle'
-Diamond = 'diamond'
-Oval = 'oval'
-Card = namedtuple('Card','color count shading shape')
-truth = {
-    0:Card(Purple,3,Solid,Squiggle),
-    1:Card(Green,2,Solid,Diamond),
-    2:Card(Purple,2,Empty,Diamond),
-    3:Card(Green,3,Shaded,Squiggle),
-    4:Card(Red,2,Shaded,Diamond),
-    5:Card(Green,3,Empty,Oval),
-    6:Card(Red,1,Solid,Squiggle),
-    8:Card(Green,2,Empty,Oval)
-}
 
 # a = cv2.goodFeaturesToTrack(image=(1),maxCorners=5,qualityLevel=0.1,minDistance=100)
+#
+# c = card(1)
+# cv2.imshow('image',c)
+# hsvcard = cv2.cvtColor(c, cv2.COLOR_BGR2HSV)
+# h = cv2.calcHist([hsvcard], [0, 1], None, [180, 256], [0, 180, 0, 256])
+# x = np.array(h)
+# thresh = 1e3
+# i,j = np.where(x>=thresh)
+# lower = np.array([70,250,0])
+# upper = np.array([80,256,256])
+# b = cv2.inRange(hsvcard,lower,upper)
 
-c = card(1)
-cv2.imshow('image',c)
-hsvcard = cv2.cvtColor(c, cv2.COLOR_BGR2HSV)
-h = cv2.calcHist([hsvcard], [0, 1], None, [180, 256], [0, 180, 0, 256])
-x = np.array(h)
-thresh = 1e3
-i,j = np.where(x>=thresh)
-lower = np.array([70,250,0])
-upper = np.array([80,256,256])
-b = cv2.inRange(hsvcard,lower,upper)
-
+from playset.attributes import Oval, Diamond, Squiggle, Card, Red, Solid, Purple, Green, Orange, Shaded, Empty
 
 
 def card(n):
@@ -169,11 +145,11 @@ def extract_and_save(filename,ncards,dirout,offset):
 def guess_shape(features):
     a = np.mean(np.array([cv2.contourArea(x) for x in features]))
     if a > 25e3:
-        return 'oval'
+        return Oval
     elif a < 20e3:
-        return 'diamond'
+        return Diamond
     else:
-        return 'squiggle'
+        return Squiggle
 
 
 if __name__ == "__main__":
@@ -244,3 +220,77 @@ if __name__ == "__main__":
     # sys.exit(0)
     #
     #
+
+
+def guess_color(card, features):
+    mask = np.zeros(card.shape[0:2], np.uint8)
+    cv2.drawContours(mask, features, -1, (255), -1)
+    card[mask == 0] = 0
+    hsvcard = cv2.cvtColor(card, cv2.COLOR_BGR2HSV)
+    colors = [Purple,Green,Red,Orange]
+    r = np.zeros((len(colors),1))
+    for i in [0,1,2,3]:
+        value = colors[i]
+        b = cv2.inRange(hsvcard, value.lower, value.upper)
+        r[i] = float((b == 255).sum().sum()) / float((mask == 255).sum().sum())
+    argmax = np.argmax(r)
+    logging.debug('max ratio {:.2f}'.format(r[argmax,0]))
+    if argmax==3:
+        argmax=2
+    result = colors[argmax]
+    return result
+
+
+def guess_shading(card,features):
+    gray = cv2.cvtColor(card, cv2.COLOR_BGR2GRAY)
+    cmask = np.zeros(gray.shape)
+    enc_center,enc_radius = cv2.minEnclosingCircle(features[0])
+    center = (int(enc_center[0]),int(enc_center[1]))
+    radius = int(enc_radius/10)
+    cv2.circle(cmask, center, radius, (1), -1)
+    x = gray.copy()
+    x[cmask == 0] = 0
+    feature_intensity = float(x.sum().sum()) / float(cmask.sum().sum())
+
+    y = gray.copy()
+    fmask = np.zeros(gray.shape)
+    cv2.drawContours(fmask,features,-1,(1),-1)
+    bmask = 1-fmask
+    y[bmask==0]=0
+    bg_intensity = float(y.sum().sum())/float(bmask.sum().sum())
+
+    points = [0, 1, 5, 10, 50, 90, 95, 99, 100]
+    xprctiles = np.percentile(x[x > 0], points)
+    yprctiles = np.percentile(y[y > 0], points)
+    print(xprctiles)
+    print(yprctiles)
+    print(feature_intensity / xprctiles[2])
+    print [feature_intensity/bg_intensity, feature_intensity, bg_intensity]
+
+    if feature_intensity/bg_intensity < 0.75:
+        return Solid
+    elif feature_intensity / xprctiles[2] > 1.2:
+        return Shaded
+    else:
+        return Empty
+
+
+
+def id_attributes(img):
+    features = get_features(img.copy())
+    shape = guess_shape(features)
+    color = guess_color(img.copy(),features)
+    shading = guess_shading(img.copy(),features)
+    return Card(color=color,count=len(features),shape=shape,shading=shading)
+
+
+class CardRepo(object):
+    def __init__(self,root):
+        self.root = root
+
+    def get(self, i):
+        filename = os.path.join(self.root,'{:}.png'.format(i))
+        if os.path.isfile(filename):
+            return cv2.imread(filename)
+        else:
+            raise Exception('{:} not found'.format(filename))
