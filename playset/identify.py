@@ -25,7 +25,7 @@ from playset.attributes import Oval, Diamond, Squiggle, Card, Red, Solid, Purple
 
 
 def card(n):
-    return cv2.imread(os.path.join(ROOT,'{:}.png'.format(n)))
+    return cv2.imread(os.path.join(training_root, '{:}.png'.format(n)))
 
 def compare_color(im1,im2):
     hlim = 180
@@ -65,9 +65,7 @@ def hist_rgb(card):
         plt.xlim([0, 256])
 
 
-def extract_cards(filename, n):
-    assert(os.path.isfile(filename))
-    img = cv2.imread(filename)
+def extract_cards(img, n):
     return [x for x in getCards(img, n)]
 
 
@@ -133,13 +131,14 @@ def center(cnt):
     return cx,cy
 
 
-def extract_and_save(filename,ncards,dirout,offset):
-    cards = extract_cards(filename,ncards)
+def extract_and_save(img,ncards,dirout,offset):
+    cards = extract_cards(img,ncards)
     print '{:}/{:} found'.format(len(cards),ncards)
-    for i in range(0, ncards):
+    for i in range(0, len(cards)):
         filenumber = i + offset
-        reffile = os.path.join(ROOT, 'data', 'training', '{:}.png'.format(filenumber))
+        reffile = os.path.join(training_root, '{:}.png'.format(filenumber))
         cv2.imwrite(reffile, cards[i])
+        logging.info('wrote to {:}'.format(reffile))
 
 
 def guess_shape(features):
@@ -176,75 +175,6 @@ def get_card_contours(im, numcards):
     return contours
 
 
-if __name__ == "__main__":
-    ROOT = 'c:/users/elmacho/pycharmprojects/playset/data/training'
-    # reffile = 'c:/users/elmacho/downloads/all cards.jpg'
-    # testfile = 'c:/users/elmacho/downloads/set sample.jpg'
-    #
-    # offset=30
-    # filename = 'C:/Users/Elmacho/Downloads/documents-export-2016-04-11/20160411_211151.jpg'
-    # ncards = 9
-    # extract_and_save(filename,ncards,os.path.join(ROOT,'data','training'),offset)
-    #
-    # sys.exit(0)
-
-
-    for filename in os.listdir(ROOT):
-        card = cv2.imread(os.path.join(ROOT,filename))
-        features = get_features(card)
-        shp = guess_shape(features)
-        print('{:}: {:} {:}{:}'.format(filename,len(features),shp, 's' if len(features)>1 else ''))
-        cv2.drawContours(card, features, -1, (0, 0, 0), 2)
-        cv2.imshow('image', card)
-        if cv2.waitKey() == 113:
-            print('quit')
-            sys.exit(0)
-        else:
-            print('continue')
-
-
-
-
-    sys.exit(0)
-    #
-    #
-    # cv2.drawContours(img, big, 0, (0,255,0), 3)
-    # cv2.imshow('image',img)
-    # cv2.waitKey()
-    #
-    # card = big[0]
-    # peri = cv2.arcLength(card,True)
-    # approx = cv2.approxPolyDP(card,0.02*peri,True)
-    #
-    # rect = cv2.minAreaRect(card)
-    # box = cv2.boxPoints(rect)
-    # box = np.int0(box)
-    # cv2.drawContours(img,[box],0,(0,0,255),2)
-    #
-    # h = np.array([ [0,0],[449,0],[449,449],[0,449] ],np.float32)
-    # a = np.array([ x[0] for x in approx ],np.float32)
-    # transform = cv2.getPerspectiveTransform(a,h)
-    # warp = cv2.warpPerspective(img,transform,(450,450))
-    # cv2.imshow('image',warp)
-    # cv2.waitKey()
-    #
-    # sys.exit(0)
-    #
-    #
-    #
-    #
-    # sys.exit(0)
-    #
-    #
-    # # shwo color image
-    # img = cv2.imread(reffile)
-    # img2 = img[:,:,::-1]
-    # plt.imshow(img2)
-    # plt.show()
-    # sys.exit(0)
-    #
-    #
-
 
 def guess_color(card, features):
     mask = np.zeros(card.shape[0:2], np.uint8)
@@ -270,8 +200,15 @@ def guess_shading(card,features):
     cmask = np.zeros(gray.shape)
     enc_center,enc_radius = cv2.minEnclosingCircle(features[0])
     center = (int(enc_center[0]),int(enc_center[1]))
-    radius = int(enc_radius/10)
-    cv2.circle(cmask, center, radius, (1), -1)
+    # rr  = 7
+    # radius = int(enc_radius/rr)
+    # cv2.circle(cmask, center, radius, (1), -1)
+    (x0,y0) = center
+    w = 100
+    h = 30
+    tl = (x0-w/2,y0-h/2)
+    lr = (x0+w/2,y0+h/2)
+    cv2.rectangle(cmask, tl, lr, (1), -1)
     x = gray.copy()
     x[cmask == 0] = 0
     feature_intensity = float(x.sum().sum()) / float(cmask.sum().sum())
@@ -286,14 +223,18 @@ def guess_shading(card,features):
     points = [0, 1, 5, 10, 50, 90, 95, 99, 100]
     xprctiles = np.percentile(x[x > 0], points)
     yprctiles = np.percentile(y[y > 0], points)
-    # print(xprctiles)
-    # print(yprctiles)
-    # print(feature_intensity / xprctiles[2])
-    # print [feature_intensity/bg_intensity, feature_intensity, bg_intensity]
+    print(xprctiles)
+    print(yprctiles)
+    print('avg feature intensity / 5%: {:.2f}'.format(feature_intensity / xprctiles[2]))
+    p5 = xprctiles[2] / yprctiles[2]
+    print('5% feature / background: {:.2f}'.format(p5))
+    print [feature_intensity/bg_intensity, feature_intensity, bg_intensity]
 
     if feature_intensity/bg_intensity < 0.75:
         return Solid
-    elif feature_intensity / xprctiles[2] > 1.2:
+    # elif feature_intensity / xprctiles[2] > 1.2:
+    #     return Shaded
+    elif p5 < 0.9:
         return Shaded
     else:
         return Empty
@@ -387,6 +328,8 @@ def set_from_img(img,title='image'):
             cv2.drawContours(icp, card_contours, i, (0, 255, 0), 3)
         except:
             pass
+    cv2.imshow('image',icp)
+    cv2.waitKey()
     card_contours = [card_contours[x] for x in range(0, len(card_contours)) if attr[x] is not None]
     attr = [attr[x] for x in range(0, len(attr)) if attr[x] is not None]
     x = [decode_attributes(x) for x in attr]
@@ -403,4 +346,93 @@ def set_from_img(img,title='image'):
         cv2.drawContours(icp, [card_contours[x] for x in [i, j, k]], -1, (0, 0, 255), 4)
         cv2.imshow(title, icp)
         cv2.waitKey()
-        cv2.destroyWindow(title)
+        # cv2.destroyWindow(title)
+
+
+if __name__ == "__main__":
+    logging.basicConfig(level=logging.DEBUG)
+    training_root = 'c:/users/elmacho/pycharmprojects/playset/data/training'
+    play_root = 'C:/Users/Elmacho/Downloads/documents-export-2016-04-11'
+
+    for name in os.listdir(play_root):
+        full = os.path.join(play_root, name)
+        if not os.path.isfile(full):
+            continue
+        orig = cv2.imread(full)
+        img = cv2.resize(orig, (0, 0), None, fx=0.5, fy=0.5, interpolation=cv2.INTER_CUBIC)
+        try:
+            set_from_img(img, 'image')
+        except Exception, e:
+            logging.error('failed for {:} with {:}'.format(name, e))
+
+    sys.exit(0)
+
+    # reffile = 'c:/users/elmacho/downloads/all cards.jpg'
+    # testfile = 'c:/users/elmacho/downloads/set sample.jpg'
+    #
+    offset=53
+    filename = 'C:/Users/Elmacho/Downloads/documents-export-2016-04-11/20160411_210741.jpg'
+    ncards = 20
+    orig = cv2.imread(filename)
+    img = cv2.resize(orig, (0, 0), None, fx=0.5, fy=0.5, interpolation=cv2.INTER_CUBIC)
+    extract_and_save(img, ncards, training_root, offset)
+
+    sys.exit(0)
+
+
+    for filename in os.listdir(training_root):
+        card = cv2.imread(os.path.join(training_root, filename))
+        features = get_features(card)
+        shp = guess_shape(features)
+        print('{:}: {:} {:}{:}'.format(filename,len(features),shp, 's' if len(features)>1 else ''))
+        cv2.drawContours(card, features, -1, (0, 0, 0), 2)
+        cv2.imshow('image', card)
+        if cv2.waitKey() == 113:
+            print('quit')
+            sys.exit(0)
+        else:
+            print('continue')
+
+
+
+
+    sys.exit(0)
+    #
+    #
+    # cv2.drawContours(img, big, 0, (0,255,0), 3)
+    # cv2.imshow('image',img)
+    # cv2.waitKey()
+    #
+    # card = big[0]
+    # peri = cv2.arcLength(card,True)
+    # approx = cv2.approxPolyDP(card,0.02*peri,True)
+    #
+    # rect = cv2.minAreaRect(card)
+    # box = cv2.boxPoints(rect)
+    # box = np.int0(box)
+    # cv2.drawContours(img,[box],0,(0,0,255),2)
+    #
+    # h = np.array([ [0,0],[449,0],[449,449],[0,449] ],np.float32)
+    # a = np.array([ x[0] for x in approx ],np.float32)
+    # transform = cv2.getPerspectiveTransform(a,h)
+    # warp = cv2.warpPerspective(img,transform,(450,450))
+    # cv2.imshow('image',warp)
+    # cv2.waitKey()
+    #
+    # sys.exit(0)
+    #
+    #
+    #
+    #
+    # sys.exit(0)
+    #
+    #
+    # # shwo color image
+    # img = cv2.imread(reffile)
+    # img2 = img[:,:,::-1]
+    # plt.imshow(img2)
+    # plt.show()
+    # sys.exit(0)
+    #
+    #
+

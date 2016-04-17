@@ -46,7 +46,22 @@ Truth = {
     35: Card(Red,2,Shaded,Squiggle),
     36: Card(Purple,1,Shaded,Oval),
     37: Card(Red,3,Shaded,Oval),
-    38: Card(Red,2,Solid,Diamond),
+    38: Card(Purple,3,Solid,Squiggle),
+    39: Card(Green,2,Solid,Diamond),
+    40: Card(Purple,2,Empty,Diamond),
+    41: Card(Green,3,Shaded,Squiggle),
+    42: Card(Red,2,Shaded,Diamond),
+    43: Card(Green,3,Empty,Oval),
+    44: Card(Red,1,Solid,Squiggle),
+    45: Card(Green,2,Empty,Oval),
+    46: Card(Green,2,Shaded,Squiggle),
+    47: Card(Red,1,Empty,Squiggle),
+    48: Card(Purple,1,Shaded,Diamond),
+    49: Card(Purple,1,Shaded,Squiggle),
+    50: Card(Purple,2,Shaded,Squiggle),
+    51: Card(Purple,3,Solid,Oval),
+    52: Card(Purple,2,Solid,Oval),
+    53: Card(Red,2,Empty,Oval),
 }
 
 
@@ -94,6 +109,21 @@ def test_group():
     assert_card(36, repo)
     assert_card(37, repo)
     assert_card(38, repo)
+    assert_card(39, repo)
+    assert_card(40, repo)
+    assert_card(41, repo)
+    assert_card(42, repo)
+    assert_card(43, repo)
+    assert_card(44, repo)
+    assert_card(45, repo)
+    assert_card(46, repo)
+    assert_card(47, repo)
+    assert_card(48, repo)
+    assert_card(49, repo)
+    assert_card(50, repo)
+    assert_card(51, repo)
+    assert_card(52, repo)
+    assert_card(53, repo)
 
 
 def assert_card(i, repo):
