@@ -5,7 +5,6 @@ import sys
 import cv2
 import matplotlib.pyplot as plt
 import numpy as np
-from card_img import getCards, rectify
 
 # a = cv2.goodFeaturesToTrack(image=(1),maxCorners=5,qualityLevel=0.1,minDistance=100)
 #
@@ -352,7 +351,7 @@ def set_from_img(img,title='image'):
 if __name__ == "__main__":
     logging.basicConfig(level=logging.DEBUG)
     training_root = 'c:/users/elmacho/pycharmprojects/playset/data/training'
-    play_root = 'C:/Users/Elmacho/Downloads/documents-export-2016-04-11'
+    play_root = 'c:/users/elmacho/pycharmprojects/playset/data/play'
 
     for name in os.listdir(play_root):
         full = os.path.join(play_root, name)
@@ -436,3 +435,48 @@ if __name__ == "__main__":
     #
     #
 
+
+def rectify(h):
+  # print h.shape
+  h = h.reshape((4,2))
+  hnew = np.zeros((4,2),dtype = np.float32)
+
+  add = h.sum(1)
+  hnew[0] = h[np.argmin(add)]
+  hnew[2] = h[np.argmax(add)]
+
+  diff = np.diff(h,axis = 1)
+  hnew[1] = h[np.argmin(diff)]
+  hnew[3] = h[np.argmax(diff)]
+
+  return hnew
+
+
+def getCards(im, numcards=4):
+  gray = cv2.cvtColor(im,cv2.COLOR_BGR2GRAY)
+  blur = cv2.GaussianBlur(gray,(1,1),1000)
+  flag, thresh = cv2.threshold(blur, 120, 255, cv2.THRESH_BINARY)
+
+  im2, contours, hierarchy = cv2.findContours(thresh,cv2.RETR_TREE,cv2.CHAIN_APPROX_SIMPLE)
+
+  contours = sorted(contours, key=cv2.contourArea,reverse=True)[:(numcards)]
+
+  for card in contours:
+    peri = cv2.arcLength(card,True)
+    print peri
+    h = cv2.approxPolyDP(card, 0.02 * peri, True)
+    if h.shape[0]>4:
+      continue
+    approx = rectify(h)
+
+    # box = np.int0(approx)
+    # cv2.drawContours(im,[box],0,(255,255,0),6)
+    # imx = cv2.resize(im,(1000,600))
+    # cv2.imshow('a',imx)
+
+    h = np.array([ [0,0],[449,0],[449,449],[0,449] ],np.float32)
+
+    transform = cv2.getPerspectiveTransform(approx,h)
+    warp = cv2.warpPerspective(im,transform,(450,450))
+
+    yield warp
